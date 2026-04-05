@@ -19,6 +19,8 @@ type MetaResponse = {
   attributes: MetaAttribute[];
 };
 
+type TitleTab = "fg" | "offset";
+
 function normalizeHex(value: string): string | null {
   const clean = value.trim();
   if (/^#[0-9a-fA-F]{6}$/.test(clean)) return clean;
@@ -71,6 +73,70 @@ function polarToCartesian(angleDeg: number, distance: number) {
     x: Math.round(Math.cos(rad) * distance),
     y: Math.round(Math.sin(rad) * distance)
   };
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function parseNumberParam(
+  params: URLSearchParams,
+  key: string,
+  fallback: number,
+  min?: number,
+  max?: number
+) {
+  const raw = params.get(key);
+  if (raw == null) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+
+  let next = parsed;
+  if (typeof min === "number") next = Math.max(min, next);
+  if (typeof max === "number") next = Math.min(max, next);
+  return next;
+}
+
+function parseBooleanParam(params: URLSearchParams, key: string, fallback: boolean) {
+  const raw = params.get(key);
+  if (raw == null) return fallback;
+  return raw === "1" || raw === "true";
+}
+
+function parseColorParam(params: URLSearchParams, key: string, fallback: string) {
+  const raw = params.get(key);
+  if (!raw) return fallback;
+  return normalizeHex(raw) ?? fallback;
+}
+
+function randInt(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randStep(min: number, max: number, step: number) {
+  const count = Math.round((max - min) / step);
+  return Number((min + randInt(0, count) * step).toFixed(4));
+}
+
+function pick<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function Section({
+  title,
+  children
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border border-white/12 p-3">
+      <div className="mb-3 text-[10px] uppercase tracking-[0.24em] text-white/60" style={font}>
+        {title}
+      </div>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
 }
 
 function Swatch({
@@ -227,20 +293,22 @@ function TitleLayer({
   );
 }
 
-function SliderGroup({
-  title,
+function SeedButton({
+  onClick,
   children
 }: {
-  title: string;
+  onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
-    <section className="border border-white/12 p-3">
-      <div className="mb-3 text-[10px] uppercase tracking-[0.24em] text-white/60" style={font}>
-        {title}
-      </div>
-      <div className="space-y-3">{children}</div>
-    </section>
+    <button
+      type="button"
+      onClick={onClick}
+      className="h-9 w-full border border-white/14 text-[11px] uppercase tracking-[0.2em] text-white transition-colors hover:border-white hover:bg-white hover:text-black"
+      style={font}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -253,6 +321,8 @@ export default function BooasWantedPage() {
   const [meta, setMeta] = useState<MetaResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [shareCopied, setShareCopied] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const [titleColor, setTitleColor] = useState("#70bac3");
   const [wantedColor, setWantedColor] = useState("#c88379");
@@ -273,8 +343,8 @@ export default function BooasWantedPage() {
   const [titleShadowDistance, setTitleShadowDistance] = useState(4);
   const [wantedShadowDistance, setWantedShadowDistance] = useState(4);
 
-  const [activeTitleColorTab, setActiveTitleColorTab] = useState<"fg" | "offset">("fg");
-  const [activeWantedColorTab, setActiveWantedColorTab] = useState<"fg" | "offset">("fg");
+  const [activeTitleColorTab, setActiveTitleColorTab] = useState<TitleTab>("fg");
+  const [activeWantedColorTab, setActiveWantedColorTab] = useState<TitleTab>("fg");
   const [boundaryHighlight, setBoundaryHighlight] = useState(false);
 
   const fetchMeta = useCallback(async (id: number) => {
@@ -291,13 +361,6 @@ export default function BooasWantedPage() {
       const json = (await res.json()) as MetaResponse;
       setMeta(json);
       setMaxTokenId((prev) => Math.max(prev, json.tokenId || 1));
-
-      const palette = getPaletteFromAttributes(json.attributes ?? []);
-      setTitleColor(palette[2] ?? palette[0] ?? "#70bac3");
-      setWantedColor(palette[0] ?? "#c88379");
-      setTitleShadowColor(palette[0] ?? "#000000");
-      setWantedShadowColor(palette[2] ?? palette[0] ?? "#000000");
-      setSelectedBoundary(0);
     } finally {
       setLoading(false);
     }
@@ -310,21 +373,144 @@ export default function BooasWantedPage() {
   }, [maxTokenId]);
 
   useEffect(() => {
-    randomToken();
-  }, [randomToken]);
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+
+    const nextTokenId = parseNumberParam(params, "token", 409, 1);
+    setTokenId(nextTokenId);
+    setInputId(String(nextTokenId));
+
+    setTitleColor(parseColorParam(params, "tc", "#70bac3"));
+    setWantedColor(parseColorParam(params, "wc", "#c88379"));
+    setTitleShadowColor(parseColorParam(params, "tsc", "#000000"));
+    setWantedShadowColor(parseColorParam(params, "wsc", "#000000"));
+
+    setTitleSize(parseNumberParam(params, "ts", 64, 34, 110));
+    setWantedSize(parseNumberParam(params, "ws", 88, 48, 130));
+    setBoundarySize(parseNumberParam(params, "bs", 18, 12, 28));
+
+    setTitleSpacing(parseNumberParam(params, "tsp", 0.18, 0, 0.4));
+    setWantedSpacing(parseNumberParam(params, "wsp", 0.2, 0, 0.4));
+    setBoundarySpacing(parseNumberParam(params, "bsp", 0.08, 0, 0.16));
+
+    setTitleShadowAngle(parseNumberParam(params, "ta", 225, 0, 360));
+    setWantedShadowAngle(parseNumberParam(params, "wa", 225, 0, 360));
+    setTitleShadowDistance(parseNumberParam(params, "td", 4, 0, 14));
+    setWantedShadowDistance(parseNumberParam(params, "wd", 4, 0, 18));
+
+    setSelectedBoundary(parseNumberParam(params, "bi", 0, 0));
+    setBoundaryHighlight(parseBooleanParam(params, "bh", false));
+    setActiveTitleColorTab(params.get("ttab") === "offset" ? "offset" : "fg");
+    setActiveWantedColorTab(params.get("wtab") === "offset" ? "offset" : "fg");
+
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
+    if (!isHydrated) return;
     fetchMeta(tokenId);
-  }, [fetchMeta, tokenId]);
+  }, [fetchMeta, isHydrated, tokenId]);
 
-  const palette = useMemo(() => getPaletteFromAttributes(meta?.attributes ?? []), [meta]);
+  const palette = useMemo(() => {
+    const base = getPaletteFromAttributes(meta?.attributes ?? []);
+    return Array.from(new Set(["#000000", ...base]));
+  }, [meta]);
+
   const boundaries = useMemo(() => getBoundaryTexts(meta?.attributes ?? []), [meta]);
+
+  useEffect(() => {
+    if (boundaries.length === 0) {
+      setSelectedBoundary(0);
+      return;
+    }
+    setSelectedBoundary((current) => clampNumber(current, 0, boundaries.length - 1));
+  }, [boundaries.length]);
+
+  useEffect(() => {
+    if (!meta) return;
+
+    const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+    const hasSeedColors =
+      params?.has("tc") ||
+      params?.has("wc") ||
+      params?.has("tsc") ||
+      params?.has("wsc") ||
+      params?.has("ts") ||
+      params?.has("ws") ||
+      params?.has("bs");
+
+    if (hasSeedColors) return;
+
+    const extractedPalette = Array.from(new Set(["#000000", ...getPaletteFromAttributes(meta.attributes ?? [])]));
+
+    setTitleColor(extractedPalette[2] ?? extractedPalette[1] ?? extractedPalette[0] ?? "#70bac3");
+    setWantedColor(extractedPalette[1] ?? extractedPalette[0] ?? "#c88379");
+    setTitleShadowColor(extractedPalette[0] ?? "#000000");
+    setWantedShadowColor(extractedPalette[2] ?? extractedPalette[1] ?? extractedPalette[0] ?? "#000000");
+  }, [meta]);
+
+  useEffect(() => {
+    if (!isHydrated || typeof window === "undefined") return;
+
+    const params = new URLSearchParams();
+
+    params.set("token", String(tokenId));
+    params.set("tc", titleColor.replace("#", ""));
+    params.set("wc", wantedColor.replace("#", ""));
+    params.set("tsc", titleShadowColor.replace("#", ""));
+    params.set("wsc", wantedShadowColor.replace("#", ""));
+
+    params.set("ts", String(titleSize));
+    params.set("ws", String(wantedSize));
+    params.set("bs", String(boundarySize));
+
+    params.set("tsp", String(Number(titleSpacing.toFixed(2))));
+    params.set("wsp", String(Number(wantedSpacing.toFixed(2))));
+    params.set("bsp", String(Number(boundarySpacing.toFixed(2))));
+
+    params.set("ta", String(titleShadowAngle));
+    params.set("wa", String(wantedShadowAngle));
+    params.set("td", String(titleShadowDistance));
+    params.set("wd", String(wantedShadowDistance));
+
+    params.set("bi", String(selectedBoundary));
+    params.set("bh", boundaryHighlight ? "1" : "0");
+    params.set("ttab", activeTitleColorTab);
+    params.set("wtab", activeWantedColorTab);
+
+    const nextUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, "", nextUrl);
+  }, [
+    activeTitleColorTab,
+    activeWantedColorTab,
+    boundaryHighlight,
+    boundarySize,
+    boundarySpacing,
+    isHydrated,
+    selectedBoundary,
+    titleColor,
+    titleShadowAngle,
+    titleShadowColor,
+    titleShadowDistance,
+    titleSize,
+    titleSpacing,
+    tokenId,
+    wantedColor,
+    wantedShadowAngle,
+    wantedShadowColor,
+    wantedShadowDistance,
+    wantedSize,
+    wantedSpacing
+  ]);
+
   const boundaryText = boundaries[selectedBoundary] ?? "";
 
   const titleShadowOffset = useMemo(
     () => polarToCartesian(titleShadowAngle, titleShadowDistance),
     [titleShadowAngle, titleShadowDistance]
   );
+
   const wantedShadowOffset = useMemo(
     () => polarToCartesian(wantedShadowAngle, wantedShadowDistance),
     [wantedShadowAngle, wantedShadowDistance]
@@ -334,6 +520,78 @@ export default function BooasWantedPage() {
     const parsed = Math.max(1, Number(inputId || "1") || 1);
     setTokenId(parsed);
     setInputId(String(parsed));
+  };
+
+  const randomizeAll = useCallback(() => {
+    const colors = palette.length > 0 ? palette : ["#000000", "#ffffff"];
+
+    setTitleColor(pick(colors));
+    setWantedColor(pick(colors));
+    setTitleShadowColor(pick(colors));
+    setWantedShadowColor(pick(colors));
+
+    setTitleSize(randInt(34, 110));
+    setWantedSize(randInt(48, 130));
+    setBoundarySize(randInt(12, 28));
+
+    setTitleSpacing(randStep(0, 0.4, 0.01));
+    setWantedSpacing(randStep(0, 0.4, 0.01));
+    setBoundarySpacing(randStep(0, 0.16, 0.01));
+
+    setTitleShadowAngle(randInt(0, 360));
+    setWantedShadowAngle(randInt(0, 360));
+    setTitleShadowDistance(randInt(0, 14));
+    setWantedShadowDistance(randInt(0, 18));
+
+    setBoundaryHighlight(Math.random() > 0.5);
+
+    if (boundaries.length > 0) {
+      setSelectedBoundary(randInt(0, boundaries.length - 1));
+    }
+  }, [boundaries.length, palette]);
+
+  const randomizeBooas = useCallback(() => {
+    const colors = palette.length > 0 ? palette : ["#000000", "#ffffff"];
+
+    setTitleColor(pick(colors));
+    setTitleShadowColor(pick(colors));
+    setTitleSize(randInt(34, 110));
+    setTitleSpacing(randStep(0, 0.4, 0.01));
+    setTitleShadowAngle(randInt(0, 360));
+    setTitleShadowDistance(randInt(0, 14));
+  }, [palette]);
+
+  const randomizeWanted = useCallback(() => {
+    const colors = palette.length > 0 ? palette : ["#000000", "#ffffff"];
+
+    setWantedColor(pick(colors));
+    setWantedShadowColor(pick(colors));
+    setWantedSize(randInt(48, 130));
+    setWantedSpacing(randStep(0, 0.4, 0.01));
+    setWantedShadowAngle(randInt(0, 360));
+    setWantedShadowDistance(randInt(0, 18));
+  }, [palette]);
+
+  const randomizeBoundary = useCallback(() => {
+    setBoundarySize(randInt(12, 28));
+    setBoundarySpacing(randStep(0, 0.16, 0.01));
+    setBoundaryHighlight(Math.random() > 0.5);
+
+    if (boundaries.length > 0) {
+      setSelectedBoundary(randInt(0, boundaries.length - 1));
+    }
+  }, [boundaries.length]);
+
+  const copyShareLink = async () => {
+    if (typeof window === "undefined") return;
+
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 1600);
+    } catch (error) {
+      console.error("Copy failed:", error);
+    }
   };
 
   const exportPoster = async () => {
@@ -374,96 +632,121 @@ export default function BooasWantedPage() {
             BOOAS WANTED POSTER
           </div>
 
-          <ControlLabel>Load BOOAS as OG</ControlLabel>
-          <div className="flex items-center gap-2">
-            <input
-              value={inputId}
-              onChange={(e) => setInputId(e.target.value.replace(/[^\d]/g, ""))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitId();
-              }}
-              className="h-11 min-w-0 flex-1 border border-white/14 bg-black px-3 text-center text-[20px] text-white outline-none"
-              style={font}
-            />
-            <button
-              type="button"
-              onClick={submitId}
-              className="h-11 shrink-0 border border-white bg-white px-4 text-[12px] uppercase tracking-[0.2em] text-black transition-colors hover:bg-black hover:text-white"
-              style={font}
-            >
-              LOAD
-            </button>
-          </div>
-
-          <button
-            type="button"
-            onClick={randomToken}
-            className="mt-2 h-11 w-full border border-white bg-white text-[12px] uppercase tracking-[0.2em] text-black transition-colors hover:bg-black hover:text-white"
-            style={font}
-          >
-            RANDOM
-          </button>
-
-          <div className="mt-6">
-            <ControlLabel>Boundary text</ControlLabel>
-            <div className="flex max-h-[360px] flex-col gap-2 overflow-y-auto pr-1">
-              {boundaries.length > 0 ? (
-                boundaries.map((item, index) => (
+          <div className="space-y-4">
+            <Section title="LOAD BOOA">
+              <div>
+                <ControlLabel>Load BOOA as OG</ControlLabel>
+                <div className="flex items-center gap-2">
+                  <input
+                    value={inputId}
+                    onChange={(e) => setInputId(e.target.value.replace(/[^\d]/g, ""))}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submitId();
+                    }}
+                    className="h-11 min-w-0 flex-1 border border-white/14 bg-black px-3 text-center text-[20px] text-white outline-none"
+                    style={font}
+                  />
                   <button
-                    key={`${item}-${index}`}
                     type="button"
-                    onClick={() => setSelectedBoundary(index)}
-                    className={`w-full border px-3 py-3 text-left text-[11px] leading-[1.5] tracking-[0.04em] ${
-                      selectedBoundary === index
-                        ? "border-white bg-white text-black"
-                        : "border-white/14 text-white hover:border-white/40"
-                    }`}
+                    onClick={submitId}
+                    className="h-11 shrink-0 border border-white bg-white px-4 text-[12px] uppercase tracking-[0.2em] text-black transition-colors hover:bg-black hover:text-white"
                     style={font}
                   >
-                    {item}
+                    LOAD
                   </button>
-                ))
-              ) : (
-                <div className="border border-white/14 px-3 py-3 text-[11px] text-white/50" style={font}>
-                  No boundary found in metadata
                 </div>
-              )}
-            </div>
-          </div>
+              </div>
 
-          <div className="mt-6 border border-white/12 p-3">
-            <div className="mb-3 text-[10px] uppercase tracking-[0.24em] text-white/60" style={font}>
-              Boundary highlight
-            </div>
-            <button
-              type="button"
-              onClick={() => setBoundaryHighlight((v) => !v)}
-              className="h-9 w-full border text-[11px] uppercase tracking-[0.2em] transition-colors hover:bg-white hover:text-black"
-              style={{
-                ...font,
-                borderColor: boundaryHighlight ? "#ffffff" : "rgba(255,255,255,0.15)",
-                background: boundaryHighlight ? "#ffffff" : "transparent",
-                color: boundaryHighlight ? "#000000" : "#ffffff"
-              }}
-            >
-              {boundaryHighlight ? "Highlight On" : "Highlight Off"}
-            </button>
-          </div>
+              <button
+                type="button"
+                onClick={randomToken}
+                className="h-11 w-full border border-white bg-white text-[12px] uppercase tracking-[0.2em] text-black transition-colors hover:bg-black hover:text-white"
+                style={font}
+              >
+                RANDOM BOOA
+              </button>
 
-          <button
-            type="button"
-            onClick={exportPoster}
-            disabled={isExporting}
-            className="mt-6 flex h-11 w-full items-center justify-center border text-[12px] uppercase tracking-[0.24em] disabled:opacity-50"
-            style={{
-              ...font,
-              borderColor: "#ffffff",
-              backgroundColor: "#ffffff",
-              color: "#000000"
-            }}
-          >
-            {isExporting ? "EXPORTING..." : "EXPORT PNG"}
-          </button>
+              <SeedButton onClick={randomizeAll}>RANDOMIZE ALL</SeedButton>
+              <SeedButton onClick={copyShareLink}>{shareCopied ? "COPIED URL" : "COPY SHARE URL"}</SeedButton>
+            </Section>
+
+            <Section title="BOUNDARY TEXT">
+              <div className="flex max-h-[360px] flex-col gap-2 overflow-y-auto pr-1">
+                {boundaries.length > 0 ? (
+                  boundaries.map((item, index) => (
+                    <button
+                      key={`${item}-${index}`}
+                      type="button"
+                      onClick={() => setSelectedBoundary(index)}
+                      className={`w-full border px-3 py-3 text-left text-[11px] leading-[1.5] tracking-[0.04em] ${
+                        selectedBoundary === index
+                          ? "border-white bg-white text-black"
+                          : "border-white/14 text-white hover:border-white/40"
+                      }`}
+                      style={font}
+                    >
+                      {item}
+                    </button>
+                  ))
+                ) : (
+                  <div className="border border-white/14 px-3 py-3 text-[11px] text-white/50" style={font}>
+                    No boundary found in metadata
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            <Section title="BOUNDARY">
+              <PixelSlider
+                label="Size"
+                value={boundarySize}
+                min={12}
+                max={28}
+                step={1}
+                onChange={setBoundarySize}
+              />
+              <PixelSlider
+                label="Spacing"
+                value={boundarySpacing}
+                min={0}
+                max={0.16}
+                step={0.01}
+                onChange={setBoundarySpacing}
+              />
+              <button
+                type="button"
+                onClick={() => setBoundaryHighlight((v) => !v)}
+                className="h-9 w-full border text-[11px] uppercase tracking-[0.2em] transition-colors hover:bg-white hover:text-black"
+                style={{
+                  ...font,
+                  borderColor: boundaryHighlight ? "#ffffff" : "rgba(255,255,255,0.15)",
+                  background: boundaryHighlight ? "#ffffff" : "transparent",
+                  color: boundaryHighlight ? "#000000" : "#ffffff"
+                }}
+              >
+                {boundaryHighlight ? "Highlight On" : "Highlight Off"}
+              </button>
+
+              <SeedButton onClick={randomizeBoundary}>RANDOM BOUNDARY</SeedButton>
+            </Section>
+
+            <Section title="EXPORT">
+              <button
+                type="button"
+                onClick={exportPoster}
+                disabled={isExporting}
+                className="flex h-11 w-full items-center justify-center border text-[12px] uppercase tracking-[0.24em] disabled:opacity-50"
+                style={{
+                  ...font,
+                  borderColor: "#ffffff",
+                  backgroundColor: "#ffffff",
+                  color: "#000000"
+                }}
+              >
+                {isExporting ? "EXPORTING..." : "EXPORT PNG"}
+              </button>
+            </Section>
+          </div>
         </aside>
 
         <section className="border border-white/12 bg-black p-4">
@@ -535,7 +818,7 @@ export default function BooasWantedPage() {
 
         <aside className="border border-white/12 bg-black p-4">
           <div className="space-y-4">
-            <SliderGroup title="BOOAS">
+            <Section title="BOOAS">
               <div>
                 <div className="mb-2 flex gap-2">
                   <TabButton
@@ -603,28 +886,11 @@ export default function BooasWantedPage() {
                 step={1}
                 onChange={setTitleShadowDistance}
               />
-            </SliderGroup>
 
-            <SliderGroup title="BOUNDARY">
-              <PixelSlider
-                label="Size"
-                value={boundarySize}
-                min={12}
-                max={28}
-                step={1}
-                onChange={setBoundarySize}
-              />
-              <PixelSlider
-                label="Spacing"
-                value={boundarySpacing}
-                min={0}
-                max={0.16}
-                step={0.01}
-                onChange={setBoundarySpacing}
-              />
-            </SliderGroup>
+              <SeedButton onClick={randomizeBooas}>RANDOM BOOAS</SeedButton>
+            </Section>
 
-            <SliderGroup title="WANTED">
+            <Section title="WANTED">
               <div>
                 <div className="mb-2 flex gap-2">
                   <TabButton
@@ -692,7 +958,9 @@ export default function BooasWantedPage() {
                 step={1}
                 onChange={setWantedShadowDistance}
               />
-            </SliderGroup>
+
+              <SeedButton onClick={randomizeWanted}>RANDOM WANTED</SeedButton>
+            </Section>
           </div>
         </aside>
       </div>
