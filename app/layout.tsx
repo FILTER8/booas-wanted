@@ -11,7 +11,7 @@ const departureMono = localFont({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://1-bitoas.com"),
+  metadataBase: new URL("https://booas-wanted.vercel.app/"),
   title: "BOOAS WANTED",
   description:
     "CC0 open-source Booas Wanted Poster Maker",
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     title: "BOOAS WANTED",
     description:
       "CC0 open-source Booas Wanted Poster Maker",
-    url: "https://1-bitoas.com",
+    url: "https://booas-wanted.vercel.app/",
     siteName: "BOOAS WANTED",
     images: [{ url: "/og-banner.png", width: 1200, height: 630 }],
     type: "website"
