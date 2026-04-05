@@ -1,5 +1,5 @@
 {
-  "name": "my-app",
+  "name": "1-bitoas",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,9 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "gifenc": "^1.0.3",
+    "html-to-image": "^1.11.13",
+    "lucide-react": "^0.542.0",
     "next": "16.2.1",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "sharp": "^0.34.0",
+    "viem": "^2.38.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
