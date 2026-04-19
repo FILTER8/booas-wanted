@@ -13,11 +13,6 @@ export const alt = 'BOOA preview card'
 const BASE_IMAGE_URL =
   'https://pub-eb33e85c31f24772bc25a0efea472efb.r2.dev'
 
-function toDataUrl(buffer: ArrayBuffer, mimeType: string) {
-  const base64 = Buffer.from(buffer).toString('base64')
-  return `data:${mimeType};base64,${base64}`
-}
-
 export default async function Image({
   params,
 }: {
@@ -25,18 +20,6 @@ export default async function Image({
 }) {
   const { id } = await params
   const imageUrl = `${BASE_IMAGE_URL}/${id}.webp`
-
-  const res = await fetch(imageUrl, {
-    cache: 'no-store',
-  })
-
-  if (!res.ok) {
-    throw new Error(`Failed to fetch BOOA image: ${res.status}`)
-  }
-
-  const mimeType = res.headers.get('content-type') || 'image/webp'
-  const buffer = await res.arrayBuffer()
-  const src = toDataUrl(buffer, mimeType)
 
   return new ImageResponse(
     (
@@ -52,13 +35,13 @@ export default async function Image({
         }}
       >
         <img
-          src={src}
+          src={imageUrl}
           alt={`BOOA #${id}`}
-          width={540}
-          height={540}
+          width={360}
+          height={360}
           style={{
             objectFit: 'contain',
-            borderRadius: 16,
+            imageRendering: 'pixelated',
           }}
         />
 
