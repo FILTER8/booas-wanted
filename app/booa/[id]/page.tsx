@@ -15,16 +15,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `BOOA #${id}`,
     description: `Khôra BOOA #${id}`,
     openGraph: {
-      title: `BOOA #${id}`,
-      description: `Khôra BOOA #${id}`,
-      images: [imageUrl],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: `BOOA #${id}`,
-      description: `Khôra BOOA #${id}`,
-      images: [imageUrl],
-    },
+  title: `BOOA #${id}`,
+  description: `Khôra BOOA #${id}`,
+},
+twitter: {
+  card: 'summary_large_image',
+  title: `BOOA #${id}`,
+  description: `Khôra BOOA #${id}`,
+},
   }
 }
 
