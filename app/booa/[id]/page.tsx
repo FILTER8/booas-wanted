@@ -1,42 +1,63 @@
-import { Metadata } from 'next'
+import type { Metadata } from 'next'
 
-const BASE_IMAGE_URL = 'https://pub-eb33e85c31f24772bc25a0efea472efb.r2.dev'
+const BASE_IMAGE_URL =
+  'https://pub-eb33e85c31f24772bc25a0efea472efb.r2.dev'
 
 type Props = {
-  params: { id: string }
+  params: Promise<{ id: string }>
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const id = params.id
+  const { id } = await params
   const imageUrl = `${BASE_IMAGE_URL}/${id}.webp`
 
   return {
     title: `BOOA #${id}`,
-    description: `Khôra BOOA agent #${id}`,
+    description: `Khôra BOOA #${id}`,
     openGraph: {
       title: `BOOA #${id}`,
-      description: `Khôra BOOA agent`,
+      description: `Khôra BOOA #${id}`,
       images: [imageUrl],
     },
     twitter: {
       card: 'summary_large_image',
       title: `BOOA #${id}`,
-      description: `Khôra BOOA agent`,
+      description: `Khôra BOOA #${id}`,
       images: [imageUrl],
     },
   }
 }
 
-export default function Page({ params }: Props) {
-  const imageUrl = `${BASE_IMAGE_URL}/${params.id}.webp`
+export default async function Page({ params }: Props) {
+  const { id } = await params
+  const imageUrl = `${BASE_IMAGE_URL}/${id}.webp`
 
   return (
-    <main style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
+    <main
+      style={{
+        minHeight: '100vh',
+        background: '#000',
+        color: '#fff',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 24,
+        padding: 32,
+      }}
+    >
+      <h1 style={{ fontSize: 32, fontWeight: 700 }}>BOOA #{id}</h1>
       <img
         src={imageUrl}
-        alt={`BOOA ${params.id}`}
-        style={{ imageRendering: 'pixelated', width: 512 }}
+        alt={`BOOA ${id}`}
+        style={{
+          width: 512,
+          height: 512,
+          imageRendering: 'pixelated',
+          borderRadius: 12,
+        }}
       />
+      <p>{imageUrl}</p>
     </main>
   )
 }
